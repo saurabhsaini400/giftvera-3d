@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { nanoid } from 'nanoid';
+import { storeFileInMemory } from '@/lib/uploadCache';
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,8 +14,22 @@ export async function POST(request: NextRequest) {
     }
 
     const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
+    const tmpUploadDir = path.join('/tmp', 'uploads');
+
+    try {
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+    } catch {
+      // Ignore
+    }
+
+    try {
+      if (!fs.existsSync(tmpUploadDir)) {
+        fs.mkdirSync(tmpUploadDir, { recursive: true });
+      }
+    } catch {
+      // Ignore
     }
 
     const uploadedUrls: string[] = [];
@@ -31,20 +46,25 @@ export async function POST(request: NextRequest) {
       // Sanitize extension
       const ext = path.extname(file.name) || '.jpg';
       const safeFilename = `${nanoid(10)}${ext.toLowerCase()}`;
-      const destination = path.join(uploadDir, safeFilename);
-      const base64 = buffer.toString('base64');
-      const dataUrl = `data:${file.type || 'image/jpeg'};base64,${base64}`;
+      const mimeType = file.type || 'image/jpeg';
 
+      // 1. Cache immediately in memory
+      storeFileInMemory(safeFilename, buffer, mimeType);
+
+      // 2. Persist to public/uploads if writable
       try {
-        if (!fs.existsSync(uploadDir)) {
-          fs.mkdirSync(uploadDir, { recursive: true });
-        }
-        fs.writeFileSync(destination, buffer);
-        uploadedUrls.push(`/uploads/${safeFilename}`);
+        fs.writeFileSync(path.join(uploadDir, safeFilename), buffer);
       } catch {
-        // Fallback for Vercel Serverless read-only filesystem
-        uploadedUrls.push(dataUrl);
+        // Fallback to /tmp
+        try {
+          fs.writeFileSync(path.join(tmpUploadDir, safeFilename), buffer);
+        } catch {
+          // Ignore
+        }
       }
+
+      // Always return dynamic API URL which serves the file from memory or disk
+      uploadedUrls.push(`/api/uploads/${safeFilename}`);
     }
 
     return NextResponse.json({

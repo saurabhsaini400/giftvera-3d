@@ -89,15 +89,29 @@ export default function BuilderPage() {
   const [copied, setCopied] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
-  // File Upload Handler
+  // File Upload Handler with Instant Local Preview and Permanent Dynamic Serving
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
     setIsUploading(true);
 
+    const fileList = Array.from(e.target.files);
+
+    // 1. Instant local thumbnail preview so images appear immediately
+    const tempItems: PhotoItem[] = fileList.map((file, idx) => ({
+      id: 'u_' + Math.random().toString(36).substring(2, 9),
+      url: URL.createObjectURL(file),
+      title: file.name.replace(/\.[^/.]+$/, '').substring(0, 30) || `Memory #${photos.length + idx + 1}`,
+      caption: 'Add a special caption for this moment...',
+      date: new Date().getFullYear().toString(),
+      orderIndex: photos.length + idx,
+    }));
+
+    setPhotos((prev) => [...prev, ...tempItems]);
+
     try {
       const formData = new FormData();
-      for (let i = 0; i < e.target.files.length; i++) {
-        formData.append('file', e.target.files[i]);
+      for (const file of fileList) {
+        formData.append('file', file);
       }
 
       const res = await fetch('/api/upload', {
@@ -107,16 +121,19 @@ export default function BuilderPage() {
 
       const data = await res.json();
       if (data.urls && data.urls.length > 0) {
-        const newPhotoItems: PhotoItem[] = data.urls.map((url: string, idx: number) => ({
-          id: 'u_' + Math.random().toString(36).substring(2, 8),
-          url,
-          title: `Memory #${photos.length + idx + 1}`,
-          caption: 'Add a special caption for this moment...',
-          date: new Date().getFullYear().toString(),
-          orderIndex: photos.length + idx,
-        }));
-
-        setPhotos((prev) => [...prev, ...newPhotoItems]);
+        // Update temp blob URLs with permanent server URLs
+        setPhotos((prev) =>
+          prev.map((photo) => {
+            const tempIndex = tempItems.findIndex((t) => t.id === photo.id);
+            if (tempIndex !== -1 && data.urls[tempIndex]) {
+              return {
+                ...photo,
+                url: data.urls[tempIndex],
+              };
+            }
+            return photo;
+          })
+        );
       }
     } catch (err) {
       console.error('Upload failed:', err);
