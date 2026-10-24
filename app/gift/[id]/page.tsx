@@ -106,7 +106,9 @@ export default function GiftViewerPage({ params }: GiftPageProps) {
     const envWsUrl = process.env.NEXT_PUBLIC_WS_URL;
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsHost = window.location.hostname;
-    const wsUrl = envWsUrl || `${wsProtocol}//${wsHost}:3001`;
+    const wsPort = window.location.port ? `:${window.location.port}` : '';
+    // If in local Next dev (port 3000), use standalone ws-server port 3001; on Render/prod, use same domain
+    const wsUrl = envWsUrl || (wsPort === ':3000' ? `${wsProtocol}//${wsHost}:3001` : `${wsProtocol}//${wsHost}${wsPort}`);
 
     let socket: WebSocket;
     try {

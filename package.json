@@ -8,7 +8,8 @@
     "dev:ws": "node server/ws-server.mjs",
     "start:ws": "node server/ws-server.mjs",
     "build": "next build",
-    "start": "next start",
+    "start": "node server/custom-server.mjs",
+    "start:next": "next start",
     "lint": "next lint"
   },
   "dependencies": {
